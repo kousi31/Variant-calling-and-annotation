@@ -1,0 +1,118 @@
+
+# Quality control and triming
+
+perl prinseq-lite.pl -verbose -fastq /media/lenovo/RESEARCH_WORK/B66.fastq -log -graph_data
+
+perl prinseq-graphs-noPCA.pl -i Y1.fastq.gd -html_all
+
+perl prinseq-lite.pl -verbose -fastq /media/lenovo/RESEARCH_WORK/B66.fastq -trim_left 4
+
+process_radtags -1 /media/lenovo/RESEARCH_WORK/test_5/B62_R1.fastq -2 /media/lenovo/RESEARCH_WORK/test_5/B62_R2.fastq -i fastq -b ./barcode/B62_separated/B62_bc_3 --inline_index --barcode_dist_2 2 --renz_1 sphgenetics --renz_2 mluCI -o ./output/test_5_out/BC_3 --retain_header  -q -r -D -s 15
+
+# Build index for buffalo genome
+
+bowtie2-build -f bbu.19.fa bbu-19
+
+
+./bowtie2 -t -p 12 -X 1000 --phred33 -x ./buffalo_index/bbu-All -1 /home/work/bovgen/buffalo/B62.1.fq,/home/work/bovgen/buffalo/B62.3.fq,/home/work/bovgen/buffalo/B62.5.fq -2 /home/work/bovgen/buffalo/B62.2.fq,/home/work/bovgen/buffalo/B62.4.fq,/home/work/bovgen/buffalo/B62.6.fq -U /home/work/bovgen/buffalo/B62.rem.1.fq,/home/work/bovgen/buffalo/B62.rem.2.fq,/home/work/bovgen/buffalo/B62.rem.3.fq,/home/work/bovgen/buffalo/B62.rem.4.fq,/home/work/bovgen/buffalo/B62.rem.5.fq,/home/work/bovgen/buffalo/B62.rem.6.fq --very-sensitive-local -S ./surya/All-chr/B62.allchr.sam --un-conc-gz ./surya/All-chr/B62.allchr.unalconc.gz --al-conc-gz ./surya/All-chr/B62.allchr.alconc.gz --met-file ./surya/All-chr/B62.allchr.met
+
+# Convert SAM to BAM
+
+time samtools view -@ 14 -b -S -o ./buffalo-bam/B62.15.bam /home/work/bovgen/bowtie2-2.3.3.1/surya/B62.15.sam
+
+time samtools sort -@ 15 ./buffalo-bam/B62.3.bam -o ./buffalo-sort-bam/B62.3.sort.bam
+
+time samtools index ./buffalo-sort-bam/B66.24.sort.bam
+
+time samtools mpileup -go ./buffalo-mp.bcf/bbump.13.bcf -f ./buffalo-reference/bbu.13.fa ./buffalo-sort-bam/B62.13.sort.bam ./buffalo-sort-bam/B64.13.sort.bam ./buffalo-sort-bam/B65.13.sort.bam ./buffalo-sort-bam/B66.13.sort.bam
+
+
+# Variant calling and filtering 
+
+time bcftools call -m -v ./buffalo-mp.bcf/bbump.2.bcf > ./buffalo-vcf/bbu.2.vcf
+
+
+
+vcfutils.pl varFilter -Q 30 -d 5 -D 200  ~/bovgen/samtools-1.6/water-buffalo/bbu.wbg.vcf >  ~/bovgen/samtools-1.6/water-buffalo/bbu.wbg.filt.rd5-Q30.vcf
+
+
+
+vcfutils.pl varFilter ./buffalo-vcf/bbu.X.vcf > ./buffalo-filt-vcf/bbu.X.filt.vcf
+
+awk '! /\#/' bbu.22.filt.vcf | awk '{if(length($4) == 1 && length($5) == 1) print}' | wc -l
+
+
+
+bcftools view -i 'MIN(DP)>10' ./buffalo-filt-vcf/bbu.17.filt.vcf > ./buffalo-filt-rd10-vcf/bbu.17.filtrd10.vcf
+
+awk '! /\#/' bbu.22.filt.vcf | awk '{if(length($4) == 1 && length($5) == 1) print}' | wc -l
+
+
+
+bcftools view -i 'MIN(DP)>5' ./buffalo-filt-vcf/bbu.17.filt.vcf > ./buffalo-filt-rd10-vcf/bbu.17.filtrd10.vcf
+
+awk '! /\#/' bbu.22.filt.vcf | awk '{if(length($4) == 1 && length($5) == 1) print}' | wc -l
+
+
+
+vcftools --vcf ./buffalo/total-snp-vcf/buffalo-filt-vcf/bbu.X.filt.vcf --max-missing 1 --recode --recode-INFO-all --out ./buffalo/full-genotype-all/rd2/bbu.rd2.X
+
+awk '! /\#/' bbu.22.filt.vcf | awk '{if(length($4) == 1 && length($5) == 1) print}' | wc -l
+
+vcftools --vcf bbu.alignbtau.filt.rd10-Q30.vcf --keep-only-indels --out bbu.alignbtau.filt.rd10-Q30.indel --recode --recode-INFO-all
+
+vcftools --vcf bbu.alignbtau.filt.rd10-Q30.vcf --remove-indels --out bbu.alignbtau.filt.rd10-Q30.rmindel --recode --recode-INFO-all
+
+
+samtools depth -a  ./buffalo-output/bbu-All/B62.allchr.sort.bam |  awk '{sum+=$3} END { print "Average = ",sum/NR}'
+
+
+bcftools call -m -v ./buffalo-mp.bcf/Arunachali.bcf  > ./buffalo-vcf/Arunachali.vcf
+
+
+vcftools --vcf Bindallsmpraw.vcf --remove-indels --recode --recode-INFO-all --out Bindallsmpraw.only_snps.vcf
+
+
+samtools flagstat A.sort.bam > A.sort.bam.stat10.txt
+
+
+samtools flagstat A.sort.bam > A.sort.bam.stat10.txt
+
+
+vcftools --vcf Bindallsmpraw.vcf --keep-only-indels --recode --recode-INFO-all --out Bindallsmpraw.only_indels.vcf
+
+
+vcfutils.pl varFilter -Q 30 -d 2 -D 500 Bindallsmpraw.only_snps.vcf > Bindallsmpraw.only_snps-filt.d2D500Q30.vcf
+
+samtools view -@ 15 -F 4 Y128.sort.bam | grep -v "XS:" | wc -l > Y128.uniq.align.reads.txt
+
+
+vcftools --chr Chr10 --vcf ~/bovgen/bbu.allchr.filt.rd10-Q30.vcf --recode --recode-INFO-all --out bbu.allchr.filt.rd10-Q30.chr10.vcf
+
+
+vcftools --vcf ./bbu.allchr.filt.rd10-Q30.rmindel.recode.vcf --chr Chr10 --from-bp 282753 --to-bp 59617704 --recode --recode-INFO-all --out ./bbu.allchr.filt.rd2-Q30.ftbp.vcf
+
+
+# Variant annotation and functional effect prediction
+
+java -Xmx4g -jar SnpSift.jar split /home/work/bovgen/cattle_data/Allsnpbostauraw.d10Q30D500.rs.ann.vcf
+
+cat /home/work/bovgen/cattle_data/Allsnpbostauraw.d10Q30D500.rs.ann.vcf | java -Xmx4g -jar SnpSift.jar filter "( CHROM = '24' )" > /home/work/bovgen/cattle_data/Allsnpbostauraw.d10Q30D500.rs.ann.24.vcf
+
+
+java -Xmx4g -jar SnpSift.jar tstv /home/work/bovgen/cattle_data/Allsnpbostauraw.d10Q30D500.rs.ann.vcf
+
+
+cat /home/work/bovgen/cattle_data/Allsnpbostauraw.d10Q30D500.rs.ann.vcf | java -Xmx4g -jar SnpSift.jar filter --set /home/work/bovgen/cattle_data/my_rs.txt "ID in SET[0]" > /home/work/bovgen/cattle_data/filteredchr6.vcf
+
+
+bcftools annotate -c ID -a ~/bovgen/bcftools-1.6/All.vcf.gz ~/bovgen/cattle_data/Allsnpbostauraw_no_indel.recode.d10Q30D500.vcf.gz > ~/bovgen/cattle_data/Allsnpbostauraw_no_indel.recode.d10Q30D500.rs.vcf
+
+
+
+java -Xmx4g -jar snpEff.jar -v -stats Bindallsnprawchrd10Q30D500.rs.html UMD3.1.86 ~/bovgen/cattle_data/bos_ind_chr/Bindallsnprawchrd10Q30D500.rs.vcf.gz > ~/bovgen/cattle_data/bos_ind_chr/Bindallsnprawchrd10Q30D500.rs.ann.vcf
+
+
+java -Xmx4g -jar snpEff.jar -v -stats /media/work/D82E-F1C5/surya/snps_indels/rd2/snps/Bindall.only_snps.ann.canononlyprot.rs.d2Q30D500.MT.html BIN /media/work/D82E-F1C5/surya/snps_indels/rd2/snps/Bindall.only_snps.ann.canononlyprot.rs.d2Q30D500.MT.vcf.recode.vcf.gz
+
+
